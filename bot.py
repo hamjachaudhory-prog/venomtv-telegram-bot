@@ -1,7 +1,6 @@
 import os
 import json
 import html
-import re
 import requests
 
 from pathlib import Path
@@ -14,15 +13,14 @@ CHANNEL = "@hdhubsports"
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 STATE_FILE = Path("seen_matches.json")
+MAX_POSTS_PER_RUN = 1
 
 
 def load_seen():
-    if STATE_FILE.exists():
-        try:
-            return set(json.loads(STATE_FILE.read_text()))
-        except (ValueError, OSError):
-            pass
-    return set()
+    try:
+        return set(json.loads(STATE_FILE.read_text()))
+    except (FileNotFoundError, ValueError, OSError):
+        return set()
 
 
 def save_seen(seen):
@@ -31,15 +29,17 @@ def save_seen(seen):
     )
 
 
-def make_hashtag(text):
-    text = re.sub(r"[^a-zA-Z0-9_]", "", text)
+def hashtag(text):
+    text = "".join(
+        c for c in str(text).title()
+        if c.isalnum() or c == "_"
+    )
     return f"#{text}" if text else ""
 
 
 def make_post(match):
-    title = html.escape(match.get("title", "Sports Match"))
-    category = match.get("category", "sports")
-    category_tag = make_hashtag(category.title())
+    title = html.escape(str(match.get("title", "Sports Match")))
+    category = str(match.get("category", "sports"))
 
     date_text = ""
     timestamp = match.get("date")
@@ -51,22 +51,23 @@ def make_post(match):
                 tz=ZoneInfo("Asia/Dhaka")
             )
             date_text = (
-                f"\n📅 Date: {dt.strftime('%d %b %Y')}"
+                f"\n📅 Date: {dt.strftime('%d %B %Y')}"
                 f"\n⏰ Time: {dt.strftime('%I:%M %p')} (Bangladesh)"
             )
         except (ValueError, OverflowError, OSError):
             pass
 
     tags = []
-    for team in (
-        match.get("teams", {}).get("home", {}),
-        match.get("teams", {}).get("away", {})
-    ):
-        name = team.get("name", "")
-        tag = make_hashtag(name.replace(" ", ""))
+    teams = match.get("teams") or {}
+
+    for side in ("home", "away"):
+        team = teams.get(side) or {}
+        tag = hashtag(team.get("name", "").replace(" ", ""))
+
         if tag and tag not in tags:
             tags.append(tag)
 
+    category_tag = hashtag(category)
     if category_tag:
         tags.append(category_tag)
 
@@ -74,22 +75,22 @@ def make_post(match):
 
     return (
         f"🏆 <b>{title}</b>\n"
-        f"🏅 Sport: {html.escape(str(category).title())}"
+        f"🏅 Sport: {html.escape(category.title())}"
         f"{date_text}\n\n"
-        f"📺 <b>Match information &amp; viewing options</b>\n"
-        f"👉 <a href=\"{WEBSITE}\">Watch on VenomTV</a>\n\n"
+        f"📺 Watch match information on VenomTV:\n"
+        f"👉 <a href=\"{WEBSITE}\">Open VenomTV</a>\n\n"
         f"{' '.join(tags)}"
     )
 
 
-def send_message(text):
+def send_message(message):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
     response = requests.post(
         url,
         json={
             "chat_id": CHANNEL,
-            "text": text,
+            "text": message,
             "parse_mode": "HTML",
             "disable_web_page_preview": True
         },
@@ -97,22 +98,23 @@ def send_message(text):
     )
 
     response.raise_for_status()
-    result = response.json()
 
+    result = response.json()
     if not result.get("ok"):
-        raise RuntimeError("Telegram could not send the message")
+        raise RuntimeError("Telegram rejected the message")
 
 
 def main():
     response = requests.get(API_URL, timeout=30)
     response.raise_for_status()
+
     matches = response.json()
 
     if not isinstance(matches, list):
-        raise RuntimeError("Unexpected API response")
+        raise RuntimeError("Unexpected matches API response")
 
     seen = load_seen()
-    updated = set(seen)
+    posted_count = 0
 
     for match in matches:
         match_id = match.get("id")
@@ -120,20 +122,20 @@ def main():
         if not match_id or match_id in seen:
             continue
 
-        post = make_post(match)
+        if posted_count >= MAX_POSTS_PER_RUN:
+            break
 
-        try:
-            send_message(post)
-            updated.add(match_id)
-            print(f"Posted: {match.get('title', match_id)}")
+        send_message(make_post(match))
 
-        except requests.RequestException as error:
-            print(f"Posting failed for {match_id}: {error}")
-            raise
+        # Save each successful post immediately.
+        seen.add(match_id)
+        save_seen(seen)
 
-    save_seen(updated)
-    print(f"Finished. Total matches received: {len(matches)}")
+        posted_count += 1
+        print(f"Posted: {match.get('title', match_id)}")
+
+    print(f"Finished. New posts sent: {posted_count}")
 
 
 if __name__ == "__main__":
-    print("VenomTV Bot is ready for testing!")
+    main()
