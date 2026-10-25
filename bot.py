@@ -136,4 +136,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    print("VenomTV Bot is ready for testing!")
