@@ -38,11 +38,21 @@ def hashtag(text):
 
 
 def make_post(match):
-    title = html.escape(str(match.get("title", "Sports Match")))
-    category = str(match.get("category", "sports"))
+    title_raw = str(match.get("title") or "Football Match")
+    title = html.escape(title_raw)
 
-    date_text = ""
+    category_raw = str(match.get("category") or "Football")
+    category = html.escape(category_raw.title())
+
+    teams = match.get("teams") or {}
+    home = teams.get("home") or {}
+    away = teams.get("away") or {}
+
+    home_name = str(home.get("name") or "")
+    away_name = str(away.get("name") or "")
+
     timestamp = match.get("date")
+    date_text = "Not confirmed"
 
     if isinstance(timestamp, (int, float)):
         try:
@@ -50,39 +60,61 @@ def make_post(match):
                 timestamp / 1000,
                 tz=ZoneInfo("Asia/Dhaka")
             )
-            date_text = (
-                f"\n📅 Date: {dt.strftime('%d %B %Y')}"
-                f"\n⏰ Time: {dt.strftime('%I:%M %p')} (Bangladesh)"
-            )
+            date_text = dt.strftime("%d %B %Y | %I:%M %p")
         except (ValueError, OverflowError, OSError):
             pass
 
-    tags = []
-    teams = match.get("teams") or {}
+    def make_tag(value):
+        value = "".join(
+            char for char in str(value).title()
+            if char.isalnum()
+        )
+        return f"#{value}" if value else ""
 
-    for side in ("home", "away"):
-        team = teams.get(side) or {}
-        tag = hashtag(team.get("name", "").replace(" ", ""))
+    tags = [
+        "#VenomTV",
+        "#Football",
+        "#FootballNews",
+        "#FootballUpdates",
+        "#FootballFixtures",
+        "#Soccer",
+        "#SoccerNews",
+        "#MatchDay",
+        "#LiveFootball",
+        "#SportsNews",
+    ]
 
-        if tag and tag not in tags:
+    for name in (home_name, away_name, category_raw):
+        tag = make_tag(name)
+        if tag and tag.lower() not in {item.lower() for item in tags}:
             tags.append(tag)
 
-    category_tag = hashtag(category)
-    if category_tag:
-        tags.append(category_tag)
+    hashtags = " ".join(tags)
 
-    tags.append("#VenomTV")
+    home_display = html.escape(home_name or "Team TBC")
+    away_display = html.escape(away_name or "Team TBC")
 
     return (
-        f"🏆 <b>{title}</b>\n"
-        f"🏅 Sport: {html.escape(category.title())}"
-        f"{date_text}\n\n"
-        f"📺 Watch match information on VenomTV:\n"
-        f"👉 <a href=\"{WEBSITE}\">Open VenomTV</a>\n\n"
-        f"{' '.join(tags)}"
+        f"⚽ <b>{title}</b>\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"🏆 <b>FOOTBALL MATCH UPDATE</b>\n\n"
+        f"🥅 <b>Match:</b> {home_display} vs {away_display}\n"
+        f"🌍 <b>Category:</b> {category}\n"
+        f"📅 <b>Date & Time:</b> {html.escape(date_text)} "
+        f"(Bangladesh Time)\n\n"
+        f"📢 <b>FOLLOW VENOMTV</b>\n"
+        f"⚽ Football news, fixtures and match updates.\n\n"
+        f"🌐 <a href=\"https://venomtv.vercel.app\">"
+        f"Visit VenomTV Website</a>\n"
+        f"📲 <a href=\"https://t.me/hdhubsports\">"
+        f"Join Our Telegram Channel</a>\n\n"
+        f"🔎 <b>Search:</b> {home_display} vs {away_display}, "
+        f"football news, football fixtures, match updates, VenomTV\n\n"
+        f"{hashtags}"
     )
+    
 
-
+    
 def send_message(message):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
 
