@@ -143,11 +143,13 @@
     "is_photo": true,
     "stream_urls": [
       "https://embed.st/embed/admin/ppv-2026-ballon-d-or-ceremony/1",
-      "https://embed.st/embed/admin/ppv-2026-ballon-d-or-ceremony/2"
+      "https://embed.st/embed/admin/ppv-2026-ballon-d-or-ceremony/2",
+      "https://embed.st/embed/hotel/2026-ballon-d-or-premier-league-1793041200/1"
     ],
     "poster_url": "https://streamed.pk/api/images/proxy/GwZg7AZpYEZgHCAjAJgCzuAQ1sFKBWSYAU2DFLABM8E9g1gDCFJMd46Tp51jwywYAE5Mw0sEQkQEEDBEgUIMogDGIKcFlYFELSBBbSiucpnAasqiB01pMFOT0ChIptnphCwJLlWOhMG5OPXEyRwJJciCjMgggA.webp",
     "buttons_added": true,
-    "posted_at": 1793010460
+    "posted_at": 1793010460,
+    "updated_at": 1793042474
   },
   "rizespor-vs-trabzonspor-2527801": {
     "message_id": 237,
