@@ -134,7 +134,7 @@ def make_post(match):
     message = (
         f"⚽ <b>{html.escape(title)}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"🏆 <b>FOOTBALL MATCH UPDATE</b>\n\n"
+        f"🏆 <b>TODAY MATCH UPDATE</b>\n\n"
         f"🥅 <b>Match:</b> "
         f"{html.escape(home)} vs {html.escape(away)}\n"
         f"🌍 <b>Category:</b> {html.escape(category.title())}\n"
