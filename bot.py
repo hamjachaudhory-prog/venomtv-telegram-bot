@@ -117,20 +117,25 @@ f"Football News, Football Fixtures, Match Updates, VenomTV\n\n"
     
 
     
-def send_message(message):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
-    response = requests.post(
-        url,
-        json={
+def send_message(message, poster_url=None):
+    if poster_url:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+        payload = {
+            "chat_id": CHANNEL,
+            "photo": poster_url,
+            "caption": message,
+            "parse_mode": "HTML"
+        }
+    else:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        payload = {
             "chat_id": CHANNEL,
             "text": message,
             "parse_mode": "HTML",
             "disable_web_page_preview": True
-        },
-        timeout=30
-    )
+        }
 
+    response = requests.post(url, json=payload, timeout=30)
     response.raise_for_status()
 
     result = response.json()
