@@ -108,7 +108,7 @@ def make_post(match):
         f"Visit VenomTV Website</a>\n"
         f"📲 <a href=\"https://t.me/hdhubsports\">"
         f"Join Our Telegram Channel</a>\n\n"
-        f"🔎 SEARCH KEYWORDS (Copy below)\n"
+        f"🔎 SEARCH \n"
 f"{html.escape(home_name or 'Football')} vs "
 f"{html.escape(away_name or 'Football')}, "
 f"Football News, Football Fixtures, Match Updates, VenomTV\n\n"
