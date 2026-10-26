@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-API_URL = "https://streamed.pk/api/matches/football"
+API_URL = "https://streamed.pk/api/matches/all"
 WEBSITE = "https://venomtv.vercel.app"
 CHANNEL = "@hdhubsports"
 
