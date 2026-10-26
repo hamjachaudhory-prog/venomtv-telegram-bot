@@ -137,5 +137,16 @@
       "https://embed.st/embed/golf/2614/2"
     ],
     "posted_at": 1792998531
+  },
+  "ppv-2026-ballon-d-or-ceremony": {
+    "message_id": 236,
+    "is_photo": true,
+    "stream_urls": [
+      "https://embed.st/embed/admin/ppv-2026-ballon-d-or-ceremony/1",
+      "https://embed.st/embed/admin/ppv-2026-ballon-d-or-ceremony/2"
+    ],
+    "poster_url": "https://streamed.pk/api/images/proxy/GwZg7AZpYEZgHCAjAJgCzuAQ1sFKBWSYAU2DFLABM8E9g1gDCFJMd46Tp51jwywYAE5Mw0sEQkQEEDBEgUIMogDGIKcFlYFELSBBbSiucpnAasqiB01pMFOT0ChIptnphCwJLlWOhMG5OPXEyRwJJciCjMgggA.webp",
+    "buttons_added": true,
+    "posted_at": 1793010460
   }
 }
