@@ -97,7 +97,7 @@ def make_post(match):
     return (
         f"⚽ <b>{title}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"🏆 <b>FOOTBALL MATCH UPDATE</b>\n\n"
+        f"🏆 <b>TODAY MATCH UPDATE</b>\n\n"
         f"🥅 <b>Match:</b> {home_display} vs {away_display}\n"
         f"🌍 <b>Category:</b> {category}\n"
         f"📅 <b>Date & Time:</b> {html.escape(date_text)} "
