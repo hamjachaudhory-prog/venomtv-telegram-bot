@@ -8,7 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import urljoin
 
-API_URL = "https://streamed.pk/api/matches/football"
+API_URL = "https://streamed.pk/api/matches/all"
 WEBSITE = "https://venomtv.vercel.app"
 CHANNEL = "@hdhubsports"
 STREAMED_BASE = "https://streamed.pk/"
@@ -140,7 +140,7 @@ def make_post(match):
     message = (
         f"⚽ <b>{title}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"🏆 <b>FOOTBALL MATCH UPDATE</b>\n\n"
+        f"🏆 <b>TODAY MATCH UPDATE</b>\n\n"
         f"🥅 <b>Match:</b> {home_display} vs {away_display}\n"
         f"🌍 <b>Category:</b> {category}\n"
         f"📅 <b>Date &amp; Time:</b> {match_date} "
