@@ -11,20 +11,14 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-# =========================
-# CONFIGURATION
-# =========================
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 CHANNEL = "@hdhubsports"
-
 API_URL = "https://streamed.pk/api/matches/all"
 STREAM_API_BASE = "https://streamed.pk/api/stream/"
 WEBSITE_URL = "https://venomtv.vercel.app"
 CHANNEL_URL = "https://t.me/hdhubsports"
-
 STATE_FILE = "posted_matches.json"
 LEGACY_SEEN_FILE = "seen_matches.json"
-
 AUTO_REACTION = "🔥"
 TIMEZONE = ZoneInfo("Asia/Dhaka")
 REQUEST_TIMEOUT = 25
@@ -36,19 +30,17 @@ logging.basicConfig(
 )
 
 session = requests.Session()
-session.headers.update({
-    "User-Agent": "VenomTV-Telegram-Bot/3.0"
-})
+session.headers.update({"User-Agent": "VenomTV-Telegram-Bot/4.0"})
 
 
 # =========================
-# STATE MANAGEMENT
+# STATE
 # =========================
 def load_legacy_seen():
     try:
         with open(LEGACY_SEEN_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return set(str(x) for x in data) if isinstance(data, list) else set()
+        return set(map(str, data)) if isinstance(data, list) else set()
     except (FileNotFoundError, json.JSONDecodeError):
         return set()
 
@@ -57,18 +49,16 @@ def load_state():
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if isinstance(data, dict):
-            return data
+        return data if isinstance(data, dict) else {}
     except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    return {}
+        return {}
 
 
 def save_state(state):
-    temp_file = STATE_FILE + ".tmp"
-    with open(temp_file, "w", encoding="utf-8") as f:
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
-    os.replace(temp_file, STATE_FILE)
+    os.replace(tmp, STATE_FILE)
 
 
 # =========================
@@ -100,8 +90,9 @@ def get_match_id(match):
 
 
 def get_category(match):
-    value = match.get("category") or match.get("sport") or "Sports"
-    return str(value).replace("_", " ").title()
+    return str(
+        match.get("category") or match.get("sport") or "Sports"
+    ).replace("_", " ").title()
 
 
 def get_poster_url(match):
@@ -130,9 +121,7 @@ def get_poster_url(match):
             return urljoin("https://streamed.pk", candidate)
 
         return (
-            "https://streamed.pk/api/images/proxy/"
-            + candidate
-            + ".webp"
+            f"https://streamed.pk/api/images/proxy/{candidate}.webp"
         )
 
     return None
@@ -151,11 +140,8 @@ def get_match_datetime(match):
 
     try:
         if isinstance(raw, (int, float)):
-            timestamp = raw / 1000 if raw > 10_000_000_000 else raw
-            dt = datetime.fromtimestamp(
-                timestamp,
-                tz=ZoneInfo("UTC")
-            )
+            ts = raw / 1000 if raw > 10_000_000_000 else raw
+            dt = datetime.fromtimestamp(ts, tz=ZoneInfo("UTC"))
         else:
             dt = datetime.fromisoformat(
                 str(raw).strip().replace("Z", "+00:00")
@@ -172,7 +158,7 @@ def get_match_datetime(match):
 
 
 # =========================
-# 50 HASHTAGS
+# EXACTLY 50 UNIQUE HASHTAGS
 # =========================
 def make_hashtags(match):
     category = get_category(match).lower()
@@ -182,26 +168,12 @@ def make_hashtags(match):
     )
 
     tags = [
-        "HDHUBSPORTS",
-        "VenomTV",
-        "LiveSports",
-        "SportsNews",
-        "SportsLive",
-        "MatchDay",
-        "LiveMatch",
-        "WatchLive",
-        "SportsFans",
-        "TrendingSports",
-        "ViralSports",
-        "TodaySports",
-        "LatestSports",
-        "SportsUpdates",
-        "LiveUpdates",
-        "MatchUpdates",
-        "SportsHighlights",
-        "GameDay",
-        "WorldSports",
-        "InternationalSports",
+        "HDHUBSPORTS", "VenomTV", "LiveSports", "SportsNews",
+        "SportsLive", "MatchDay", "LiveMatch", "WatchLive",
+        "SportsFans", "TrendingSports", "ViralSports",
+        "TodaySports", "LatestSports", "SportsUpdates",
+        "LiveUpdates", "MatchUpdates", "SportsHighlights",
+        "GameDay", "WorldSports", "InternationalSports",
     ]
 
     category_tags = {
@@ -248,15 +220,14 @@ def make_hashtags(match):
         ],
     }
 
-    matched_category = None
+    matched = next(
+        (values for key, values in category_tags.items()
+         if key in category),
+        None
+    )
 
-    for key, values in category_tags.items():
-        if key in category:
-            matched_category = values
-            break
-
-    if matched_category:
-        tags.extend(matched_category)
+    if matched:
+        tags.extend(matched)
     else:
         clean_category = re.sub(r"[^a-zA-Z0-9]", "", category)
         if clean_category:
@@ -268,56 +239,52 @@ def make_hashtags(match):
                 clean_category + "Updates",
             ])
 
-    # Add team / competition names when suitable.
-    # Avoid turning every word into a hashtag.
-    words = re.findall(r"[A-Za-z0-9]+", title)
-    for word in words:
-        if len(word) >= 3:
-            tags.append(word)
+    tags.extend(
+        word for word in re.findall(r"[A-Za-z0-9]+", title)
+        if len(word) >= 3
+    )
 
-    unique = []
-    seen = set()
-
-    for tag in tags:
-        tag = re.sub(r"[^A-Za-z0-9_]", "", tag)
-        if not tag:
-            continue
-
-        key = tag.lower()
-        if key not in seen:
-            seen.add(key)
-            unique.append("#" + tag)
-
-    # Fill any missing slots to reach exactly 50 unique hashtags.
-    extra_tags = [
-        "SportsWorld", "FanZone", "LiveCoverage",
-        "MatchCentre", "SportsCommunity", "GameHighlights",
-        "TopSports", "SportsAction", "PlayByPlay",
-        "GlobalSports", "WatchSports", "MatchTime",
-        "SportsArena", "TeamNews", "MatchPreview",
-        "LiveCompetition", "SportsBuzz", "GameOn",
-        "SportsToday", "AllSports", "MatchLive",
-        "SportsMedia", "TeamFans", "LiveEvent",
-        "GameHighlightsLive", "SportsChannel",
-        "OnlineSports", "SportsNetwork", "MatchAlert",
-        "SportsFeed", "FanCommunity", "LiveGame",
-        "SportUpdates", "MatchAction", "SportsZone",
-        "GameCoverage", "WatchTheMatch", "SportsDaily",
+    extras = [
+        "SportsWorld", "FanZone", "LiveCoverage", "MatchCentre",
+        "SportsCommunity", "GameHighlights", "TopSports",
+        "SportsAction", "PlayByPlay", "GlobalSports", "WatchSports",
+        "MatchTime", "SportsArena", "TeamNews", "MatchPreview",
+        "LiveCompetition", "SportsBuzz", "GameOn", "SportsToday",
+        "AllSports", "MatchLive", "SportsMedia", "TeamFans",
+        "LiveEvent", "GameHighlightsLive", "SportsChannel",
+        "OnlineSports", "SportsNetwork", "MatchAlert", "SportsFeed",
+        "FanCommunity", "LiveGame", "SportUpdates", "MatchAction",
+        "SportsZone", "GameCoverage", "WatchTheMatch", "SportsDaily",
+        "LiveSportEvent", "SportsWorldWide", "MatchNews", "TeamUpdate",
+        "LiveArena", "SportsPassion", "WatchTogether", "SportsFever",
     ]
 
-    for tag in extra_tags:
+    unique, seen = [], set()
+
+    for tag in tags + extras:
+        tag = re.sub(r"[^A-Za-z0-9_]", "", tag)
         key = tag.lower()
-        if key not in seen:
+
+        if tag and key not in seen:
             seen.add(key)
             unique.append("#" + tag)
+
         if len(unique) == 50:
             break
+
+    n = 1
+    while len(unique) < 50:
+        tag = f"SportsUpdate{n}"
+        if tag.lower() not in seen:
+            seen.add(tag.lower())
+            unique.append("#" + tag)
+        n += 1
 
     return " ".join(unique[:50])
 
 
 # =========================
-# FETCH MATCHES & STREAMS
+# API FETCHING
 # =========================
 def fetch_matches():
     response = session.get(API_URL, timeout=REQUEST_TIMEOUT)
@@ -336,8 +303,7 @@ def fetch_matches():
 
 
 def fetch_streams_for_match(match):
-    found = []
-    seen_urls = set()
+    found, seen_urls = [], set()
 
     for source_info in match.get("sources") or []:
         if not isinstance(source_info, dict):
@@ -370,26 +336,26 @@ def fetch_streams_for_match(match):
                 if not isinstance(stream, dict):
                     continue
 
-                embed_url = stream.get("embedUrl")
-                if not isinstance(embed_url, str):
+                url = stream.get("embedUrl")
+                if not isinstance(url, str):
                     continue
 
-                embed_url = embed_url.strip()
-                parsed = urlparse(embed_url)
+                url = url.strip()
+                parsed = urlparse(url)
 
-                if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                if (
+                    parsed.scheme not in ("http", "https")
+                    or not parsed.netloc
+                    or url in seen_urls
+                ):
                     continue
 
-                if embed_url in seen_urls:
-                    continue
-
-                seen_urls.add(embed_url)
+                seen_urls.add(url)
 
                 found.append({
-                    "url": embed_url,
+                    "url": url,
                     "language": safe_str(
-                        stream.get("language"),
-                        "Unknown"
+                        stream.get("language"), "Unknown"
                     ),
                     "quality": (
                         "HD" if stream.get("hd") is True else "SD"
@@ -410,7 +376,7 @@ def fetch_streams_for_match(match):
 # =========================
 def telegram_request(method, payload):
     if not TOKEN:
-        raise RuntimeError("Missing TELEGRAM_BOT_TOKEN secret")
+        raise RuntimeError("Missing TELEGRAM_BOT_TOKEN GitHub Secret")
 
     response = session.post(
         f"https://api.telegram.org/bot{TOKEN}/{method}",
@@ -423,7 +389,8 @@ def telegram_request(method, payload):
 
     if not result.get("ok"):
         raise RuntimeError(
-            f"{method} failed: {result.get('description')}"
+            f"Telegram {method} failed: "
+            f"{result.get('description', 'Unknown error')}"
         )
 
     return result["result"]
@@ -450,11 +417,12 @@ def build_keyboard(streams):
 
 
 # =========================
-# BEAUTIFUL SPORTS POST
+# POST CONTENT
 # =========================
 def make_post(match, streams):
     title = html.escape(
-        safe_str(match.get("title") or match.get("name"), "Upcoming Match")
+        safe_str(match.get("title") or match.get("name"),
+                 "Upcoming Match")
     )
     category = html.escape(get_category(match))
     match_time = html.escape(get_match_datetime(match))
@@ -462,29 +430,53 @@ def make_post(match, streams):
 
     if streams:
         stream_text = f"🟢 <b>STREAMS AVAILABLE:</b> {len(streams)}"
-        stream_hint = "👇 <b>Select your stream below</b>"
+        hint = "👇 <b>Select a Play button below</b>"
     else:
         stream_text = "🟡 <b>STREAM STATUS:</b> Awaiting streams"
-        stream_hint = "🔔 Play buttons will appear when streams are available."
+        hint = "🔔 Play buttons will appear when streams are available."
 
-    message = (
-        "━━━━━━━━━━━━━━━━━━\n"
+    body = (
         "🏆 <b>HD HUB SPORTS | LIVE MATCH CENTRE</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"🔥 <b>{title}</b>\n\n"
         f"🏷️ <b>SPORT:</b> {category}\n"
-        f"🕒 <b>KICK-OFF:</b> {match_time}\n\n"
+        f"🕒 <b>TIME:</b> {match_time}\n\n"
         f"{stream_text}\n"
-        f"{stream_hint}\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        f'🌐 <a href="{WEBSITE_URL}">WATCH ON VENOMTV</a>\n'
-        f'📢 <a href="{CHANNEL_URL}">JOIN OUR CHANNEL</a>\n'
-        "━━━━━━━━━━━━━━━━━━\n\n"
-        f"{hashtags}"
+        f"{hint}\n\n"
+        f'🌐 <a href="{WEBSITE_URL}">VenomTV Website</a> · '
+        f'📢 <a href="{CHANNEL_URL}">Join Channel</a>\n\n'
     )
 
-    # Telegram caption limit is 1024 characters.
-    return message[:1000]
+    message = body + hashtags
+
+    if len(message) > 1024:
+        body = (
+            f"🏆 <b>HD HUB SPORTS</b>\n"
+            f"🔥 <b>{title}</b>\n"
+            f"🏷️ {category} · 🕒 {match_time}\n"
+            f"📺 Streams: {len(streams)}\n"
+            f'🌐 <a href="{WEBSITE_URL}">VenomTV</a> · '
+            f'📢 <a href="{CHANNEL_URL}">Join Channel</a>\n\n'
+        )
+        message = body + hashtags
+
+    if len(message) > 1024:
+        body = (
+            f"🏆 <b>HD HUB SPORTS</b> | "
+            f"🔥 <b>{title}</b>\n"
+            f"{category} · {match_time}\n"
+            f"📺 Streams: {len(streams)}\n\n"
+        )
+        message = body + hashtags
+
+    # Never cut a hashtag in half.
+    if len(message) > 1024:
+        logging.warning(
+            "Caption is over Telegram's 1024-character limit; "
+            "consider using a text post."
+        )
+
+    return message
 
 
 def send_message(message, poster_url=None, streams=None):
@@ -505,7 +497,7 @@ def send_message(message, poster_url=None, streams=None):
             result = telegram_request("sendPhoto", payload)
             return result["message_id"], True
         except Exception as exc:
-            logging.warning("sendPhoto failed: %s", exc)
+            logging.warning("sendPhoto failed; text fallback: %s", exc)
 
     payload = {
         "chat_id": CHANNEL,
@@ -526,16 +518,16 @@ def edit_existing_post(message_id, is_photo, message, streams):
 
     payload = {
         "chat_id": CHANNEL,
-        "message_id": message_id,
+        "message_id": int(message_id),
         "parse_mode": "HTML",
         "reply_markup": keyboard or {"inline_keyboard": []},
     }
 
     if is_photo:
-        payload["caption"] = message[:1000]
+        payload["caption"] = message
         telegram_request("editMessageCaption", payload)
     else:
-        payload["text"] = message[:4000]
+        payload["text"] = message
         payload["disable_web_page_preview"] = True
         telegram_request("editMessageText", payload)
 
@@ -544,16 +536,19 @@ def add_auto_reaction(message_id):
     try:
         telegram_request("setMessageReaction", {
             "chat_id": CHANNEL,
-            "message_id": message_id,
+            "message_id": int(message_id),
             "reaction": [{"type": "emoji", "emoji": AUTO_REACTION}],
             "is_big": False,
         })
     except Exception as exc:
-        logging.warning("Reaction failed: %s", exc)
+        logging.warning(
+            "Could not add reaction to message %s: %s",
+            message_id, exc
+        )
 
 
 # =========================
-# MAIN
+# MAIN: UPDATE EXISTING POSTS
 # =========================
 def main():
     state = load_state()
@@ -561,13 +556,14 @@ def main():
     matches = fetch_matches()
 
     if not matches:
-        logging.info("No matches returned.")
+        logging.info("No matches returned; preserving state.")
         return
 
-    logging.info("Fetched %s matches.", len(matches))
+    logging.info("Fetched %s matches", len(matches))
 
     new_posts = 0
     updated_posts = 0
+    skipped_legacy = 0
 
     for match in matches:
         if not isinstance(match, dict):
@@ -579,17 +575,23 @@ def main():
 
         try:
             streams = fetch_streams_for_match(match)
-            stream_urls = [stream["url"] for stream in streams]
+            stream_urls = [item["url"] for item in streams]
             message = make_post(match, streams)
             poster_url = get_poster_url(match)
-
             old = state.get(match_id)
 
+            # Existing saved Telegram post: edit it instead of reposting.
             if old and old.get("message_id"):
                 old_urls = set(old.get("stream_urls", []))
                 new_urls = set(stream_urls)
 
-                if old_urls != new_urls:
+                # Force one edit for old records without buttons_added.
+                needs_update = (
+                    old_urls != new_urls
+                    or not old.get("buttons_added", False)
+                )
+
+                if needs_update:
                     edit_existing_post(
                         int(old["message_id"]),
                         bool(old.get("is_photo")),
@@ -598,51 +600,66 @@ def main():
                     )
 
                     old["stream_urls"] = stream_urls
+                    old["buttons_added"] = True
+                    old["poster_url"] = (
+                        poster_url or old.get("poster_url")
+                    )
                     old["updated_at"] = int(time.time())
                     state[match_id] = old
                     save_state(state)
-                    updated_posts += 1
 
-            elif match_id in legacy_seen:
+                    updated_posts += 1
+                    logging.info(
+                        "Edited existing post for %s; message_id=%s",
+                        match_id, old["message_id"]
+                    )
+
+                continue
+
+            # Legacy IDs don't include Telegram message IDs.
+            # Skip them to avoid making duplicate posts.
+            if match_id in legacy_seen:
+                skipped_legacy += 1
                 logging.info(
-                    "Skipping legacy match %s; no message ID saved.",
+                    "Skipping legacy match %s: no message ID saved",
                     match_id
                 )
                 continue
 
-            else:
-                message_id, is_photo = send_message(
-                    message,
-                    poster_url,
-                    streams,
-                )
+            # Only genuinely new matches are posted.
+            message_id, is_photo = send_message(
+                message, poster_url, streams
+            )
 
-                state[match_id] = {
-                    "message_id": message_id,
-                    "is_photo": is_photo,
-                    "stream_urls": stream_urls,
-                    "poster_url": poster_url,
-                    "posted_at": int(time.time()),
-                }
+            state[match_id] = {
+                "message_id": message_id,
+                "is_photo": is_photo,
+                "stream_urls": stream_urls,
+                "poster_url": poster_url,
+                "buttons_added": True,
+                "posted_at": int(time.time()),
+            }
 
-                save_state(state)
-                add_auto_reaction(message_id)
+            save_state(state)
+            add_auto_reaction(message_id)
+            new_posts += 1
 
-                new_posts += 1
-                logging.info(
-                    "Posted match %s as message %s",
-                    match_id,
-                    message_id,
-                )
-                time.sleep(1.2)
+            logging.info(
+                "Posted new match %s as message %s",
+                match_id, message_id
+            )
+            time.sleep(1.2)
 
-        except Exception:
-            logging.exception("Failed processing match %s", match_id)
+        except Exception as exc:
+            logging.exception(
+                "Failed processing match %s: %s",
+                match_id, exc
+            )
 
     logging.info(
-        "Finished. New posts: %s; updated posts: %s",
-        new_posts,
-        updated_posts,
+        "Finished. New posts: %s; updated posts: %s; "
+        "skipped legacy: %s",
+        new_posts, updated_posts, skipped_legacy
     )
 
 
