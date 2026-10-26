@@ -1,6 +1,7 @@
 import os
 import json
 import html
+import time
 import requests
 
 from pathlib import Path
@@ -8,60 +9,52 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from urllib.parse import urljoin
 
+# API and channel settings
 API_URL = "https://streamed.pk/api/matches/all"
+STREAMED_BASE = "https://streamed.pk/"
 WEBSITE = "https://venomtv.vercel.app"
 CHANNEL = "@hdhubsports"
-STREAMED_BASE = "https://streamed.pk/"
 
 TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 STATE_FILE = Path("seen_matches.json")
 
-# One new match per GitHub Actions run.
-MAX_POSTS_PER_RUN = 1
-
 REQUEST_TIMEOUT = 30
+TELEGRAM_DELAY = 1.5
+
+session = requests.Session()
 
 
 def load_seen():
     try:
-        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        return set(data) if isinstance(data, list) else set()
+        data = json.loads(
+            STATE_FILE.read_text(encoding="utf-8")
+        )
+        if isinstance(data, list):
+            return set(str(item) for item in data)
     except (FileNotFoundError, ValueError, OSError):
-        return set()
+        pass
+
+    return set()
 
 
 def save_seen(seen):
     STATE_FILE.write_text(
-        json.dumps(sorted(seen), ensure_ascii=False, indent=2),
+        json.dumps(
+            sorted(seen),
+            ensure_ascii=False,
+            indent=2
+        ),
         encoding="utf-8"
     )
 
 
-def hashtag(text):
-    text = "".join(
-        char for char in str(text).title()
-        if char.isalnum()
-    )
-    return f"#{text}" if text else ""
-
-
-def get_team_name(teams, side):
-    team = teams.get(side) or {}
-
-    if isinstance(team, dict):
-        return str(team.get("name") or "")
-
-    return str(team or "")
-
-
-def get_match_datetime(match):
+def get_match_date(match):
     timestamp = match.get("date")
 
     if not isinstance(timestamp, (int, float)):
         return "Not available"
 
     try:
-        # Streamed match timestamps are expected in milliseconds.
         dt = datetime.fromtimestamp(
             timestamp / 1000,
             tz=ZoneInfo("Asia/Dhaka")
@@ -69,6 +62,25 @@ def get_match_datetime(match):
         return dt.strftime("%d %B %Y | %I:%M %p")
     except (ValueError, OverflowError, OSError):
         return "Not available"
+
+
+def get_team_name(match, side):
+    teams = match.get("teams") or {}
+    team = teams.get(side) or {}
+
+    if isinstance(team, dict):
+        return str(team.get("name") or "")
+
+    return str(team)
+
+
+def make_hashtag(name):
+    name = "".join(
+        c for c in str(name).title()
+        if c.isalnum()
+    )
+
+    return f"#{name}" if name else ""
 
 
 def get_poster_url(match):
@@ -80,33 +92,19 @@ def get_poster_url(match):
     if not isinstance(poster, str) or not poster.strip():
         return None
 
-    poster = poster.strip()
-
-    # Handle absolute and relative image URLs.
-    return urljoin(STREAMED_BASE, poster)
+    return urljoin(STREAMED_BASE, poster.strip())
 
 
 def make_post(match):
-    title_raw = str(match.get("title") or "Football Match")
-    title = html.escape(title_raw)
+    title = str(match.get("title") or "Football Match")
+    category = str(match.get("category") or "Football")
 
-    category_raw = str(match.get("category") or "football")
-    category = html.escape(category_raw.title())
+    home = get_team_name(match, "home") or "Team TBC"
+    away = get_team_name(match, "away") or "Team TBC"
 
-    teams = match.get("teams") or {}
+    match_date = get_match_date(match)
 
-    if not isinstance(teams, dict):
-        teams = {}
-
-    home_name = get_team_name(teams, "home")
-    away_name = get_team_name(teams, "away")
-
-    home_display = html.escape(home_name or "Team TBC")
-    away_display = html.escape(away_name or "Team TBC")
-
-    match_date = html.escape(get_match_datetime(match))
-
-    # Generate relevant hashtags.
+    # Relevant football hashtags
     tags = [
         "#VenomTV",
         "#Football",
@@ -119,97 +117,99 @@ def make_post(match):
         "#SportsNews",
     ]
 
-    for value in (home_name, away_name, category_raw):
-        tag = hashtag(value)
+    for name in (home, away, category):
+        tag = make_hashtag(name)
 
         if tag and tag.lower() not in {
-            existing.lower() for existing in tags
+            item.lower() for item in tags
         }:
             tags.append(tag)
 
-    # Keep the caption within Telegram's caption limit.
-    hashtags = " ".join(tags)
-
-    search_text = (
-        f"{home_name or 'Football'} vs "
-        f"{away_name or 'Football'}, "
-        "Football News, Football Fixtures, "
-        "Football Match Updates, VenomTV"
+    search_keywords = (
+        f"{home} vs {away}, Football News, "
+        f"Football Fixtures, Match Updates, VenomTV"
     )
 
+    # Keep the caption below Telegram's photo-caption limit.
     message = (
-        f"⚽ <b>{title}</b>\n"
+        f"⚽ <b>{html.escape(title)}</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"🏆 <b>TODAY MATCH UPDATE</b>\n\n"
-        f"🥅 <b>Match:</b> {home_display} vs {away_display}\n"
-        f"🌍 <b>Category:</b> {category}\n"
-        f"📅 <b>Date &amp; Time:</b> {match_date} "
-        f"(Bangladesh Time)\n\n"
+        f"🏆 <b>FOOTBALL MATCH UPDATE</b>\n\n"
+        f"🥅 <b>Match:</b> "
+        f"{html.escape(home)} vs {html.escape(away)}\n"
+        f"🌍 <b>Category:</b> {html.escape(category.title())}\n"
+        f"📅 <b>Date &amp; Time:</b> "
+        f"{html.escape(match_date)} (Bangladesh Time)\n\n"
         f"📢 <b>FOLLOW VENOMTV</b>\n"
         f"⚽ Football news, fixtures and match updates.\n\n"
         f"🌐 <a href=\"{WEBSITE}\">Visit VenomTV Website</a>\n"
         f"📲 <a href=\"https://t.me/hdhubsports\">"
         f"Join Our Telegram Channel</a>\n\n"
         f"🔎 <b>SEARCH KEYWORDS</b>\n"
-        f"<code>{html.escape(search_text)}</code>\n\n"
-        f"{hashtags}"
+        f"<code>{html.escape(search_keywords)}</code>\n\n"
+        f"{' '.join(tags)}"
     )
-
-    # Telegram photo captions have a 1024-character limit.
-    if len(message) > 1000:
-        message = (
-            f"⚽ <b>{title}</b>\n\n"
-            f"🥅 {home_display} vs {away_display}\n"
-            f"🏆 {category}\n"
-            f"📅 {match_date} (Bangladesh Time)\n\n"
-            f"🌐 <a href=\"{WEBSITE}\">Visit VenomTV</a>\n"
-            f"📲 <a href=\"https://t.me/hdhubsports\">"
-            f"Join Telegram</a>\n\n"
-            f"🔎 <code>{html.escape(search_text)}</code>\n\n"
-            f"{hashtags}"
-        )
 
     return message
 
 
+def telegram_request(method, payload):
+    url = f"https://api.telegram.org/bot{TOKEN}/{method}"
+
+    response = session.post(
+        url,
+        json=payload,
+        timeout=REQUEST_TIMEOUT
+    )
+    response.raise_for_status()
+
+    result = response.json()
+
+    if not result.get("ok"):
+        raise RuntimeError(
+            result.get("description", "Telegram API error")
+        )
+
+    return result
+
+
 def send_message(message, poster_url=None):
+    # Try sending the thumbnail first.
     if poster_url:
-        url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+        try:
+            telegram_request(
+                "sendPhoto",
+                {
+                    "chat_id": CHANNEL,
+                    "photo": poster_url,
+                    "caption": message,
+                    "parse_mode": "HTML",
+                }
+            )
+            print("Posted with thumbnail.")
+            return
 
-        payload = {
-            "chat_id": CHANNEL,
-            "photo": poster_url,
-            "caption": message,
-            "parse_mode": "HTML",
-        }
-    else:
-        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        except (requests.RequestException, RuntimeError) as exc:
+            print(f"Photo failed; trying text post: {exc}")
 
-        payload = {
+    # Fallback: send the post as text.
+    telegram_request(
+        "sendMessage",
+        {
             "chat_id": CHANNEL,
             "text": message,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }
-
-    response = requests.post(
-        url,
-        json=payload,
-        timeout=REQUEST_TIMEOUT
     )
 
-    response.raise_for_status()
-    result = response.json()
-
-    if not result.get("ok"):
-        raise RuntimeError(
-            f"Telegram API rejected the message: "
-            f"{result.get('description', 'Unknown error')}"
-        )
+    print("Posted as text.")
 
 
 def main():
-    response = requests.get(
+    print("VenomTV Football Bot starting...")
+
+    response = session.get(
         API_URL,
         timeout=REQUEST_TIMEOUT
     )
@@ -218,58 +218,72 @@ def main():
     matches = response.json()
 
     if not isinstance(matches, list):
-        raise RuntimeError("Unexpected football API response")
+        raise RuntimeError("Unexpected API response: expected a list.")
+
+    print(f"Matches received from API: {len(matches)}")
 
     seen = load_seen()
-    posted_count = 0
+    posted = 0
+    skipped = 0
+    failed = 0
 
+    # Process every returned match, not just the first one.
     for match in matches:
         if not isinstance(match, dict):
+            skipped += 1
             continue
 
         match_id = match.get("id")
+
         if not match_id:
+            skipped += 1
             continue
 
         match_id = str(match_id)
 
-        if match_id in seen:
-            continue
-
-        # Only allow football-category matches.
+        # Only football matches
         category = str(match.get("category") or "").lower()
 
         if category != "football":
+            skipped += 1
             continue
 
-        if posted_count >= MAX_POSTS_PER_RUN:
-            break
-
-        message = make_post(match)
-        poster_url = get_poster_url(match)
+        # Do not repost matches already recorded as successful.
+        if match_id in seen:
+            skipped += 1
+            continue
 
         try:
-            send_message(message, poster_url=poster_url)
+            message = make_post(match)
+            poster_url = get_poster_url(match)
 
-        except requests.RequestException as exc:
-            # If photo delivery fails, try a text-only post.
-            if poster_url:
-                print(
-                    f"Photo post failed for {match_id}; "
-                    "trying text-only post."
-                )
-                send_message(message, poster_url=None)
-            else:
-                raise exc
+            send_message(message, poster_url)
 
-        # Mark a match as seen only after successful delivery.
-        seen.add(match_id)
-        save_seen(seen)
+            # Record the match only after Telegram accepts the post.
+            seen.add(match_id)
+            save_seen(seen)
 
-        posted_count += 1
-        print(f"Posted: {match.get('title', match_id)}")
+            posted += 1
+            print(
+                f"SUCCESS: {match.get('title', match_id)}"
+            )
 
-    print(f"Finished. New posts sent: {posted_count}")
+            time.sleep(TELEGRAM_DELAY)
+
+        except Exception as exc:
+            failed += 1
+            print(
+                f"FAILED: {match.get('title', match_id)}: {exc}"
+            )
+            # Continue trying the remaining matches.
+            continue
+
+    print("========== SUMMARY ==========")
+    print(f"API matches: {len(matches)}")
+    print(f"New posts sent: {posted}")
+    print(f"Skipped matches: {skipped}")
+    print(f"Failed posts: {failed}")
+    print("Bot run completed.")
 
 
 if __name__ == "__main__":
