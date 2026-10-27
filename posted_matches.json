@@ -532,5 +532,15 @@
     "poster_url": "https://streamed.pk/api/images/proxy/GwZg7AZpYEZgHCAjAJgCzrAThFlBWSUYAUwVmDW2nmAmD32FrWGHXbeAENgBjUgg5sSdTtw5kAJqWCEImeuFFs8VPiClhRiLGxDcQGmJqMGQiRBBAwCwJBT7DZ9FNrYou28vT2jPTLRg7vSiEEA.webp",
     "buttons_added": true,
     "posted_at": 1793059775
+  },
+  "2026-ballon-dor": {
+    "message_id": 269,
+    "is_photo": true,
+    "stream_urls": [
+      "https://embed.st/embed/hotel/2026-ballon-d-or-premier-league-1793041200/1"
+    ],
+    "poster_url": "https://streamed.pk/api/images/proxy/GwZg7AZpYEZgHCAjAJgCzobYawE5JgBDYMERAExAFNgVgGSBjYahFAVmHhwczjy8ebeO1w9SMenQbFgLEfVj5eUWqIgy0wDumCCSYUry6bceTt14zWO9CDwgqREDAev3FexWLkPL+h8vUAg-KikQ2x4iehA4lwTY+mo4-T8XWipHFkpObC4maVIRQkFaei4eMDBaTVqgA.webp",
+    "buttons_added": true,
+    "posted_at": 1793065461
   }
 }
